@@ -4,10 +4,6 @@
 #include "DI.h"
 #include "ff_utf8.h"
 
-// Temporary diagnostics for GP1 card saving and ejection.
-#define DEBUG_GCAM
-#define DEBUG_CARD
-
 #ifndef DEBUG_GCAM
 #define dbgprintf(...)
 #else
@@ -209,8 +205,6 @@ void GCAMCARDCommand( char *DataIn, char *DataOut )
 				CARDIsInserted = 0;
 			}
 		}
-		if( GP1EjectReply )
-			dbgprintf("GP1 card removal: command=%02x position=%02x\n", CARDCommand, CARDGP1EjectPosition );
 		switch(CARDCommand)
 		{
 			case CARD_INIT:
@@ -340,9 +334,6 @@ void GCAMCARDCommand( char *DataIn, char *DataOut )
 						cmd|= CARDBuffer[3] << 16;
 						cmd|= CARDBuffer[4] <<  8;
 						cmd|= CARDBuffer[5] <<  0;
-
-					if( TRIGame == TRI_GP1 )
-						dbgprintf("GP1 card command: %08x inserted=%u state=%02x\n", cmd, CARDIsInserted, CARDBit );
 
 					switch(cmd)
 					{
@@ -532,11 +523,9 @@ void GCAMCARDCommand( char *DataIn, char *DataOut )
 								FIL cf;
 								if( f_open_char( &cf, GCAMGetCARDName(), FA_WRITE|FA_CREATE_ALWAYS ) == FR_OK )
 								{
-									u32 wrote = 0;
-									FRESULT WriteResult = f_write( &cf, CARDMemory, CARDMemorySize, &wrote );
-									FRESULT CloseResult = f_close( &cf );
-									if( TRIGame == TRI_GP1 )
-										dbgprintf("CARDWrite result: write=%u close=%u bytes=%u/%u\n", WriteResult, CloseResult, wrote, CARDMemorySize );
+									u32 wrote;
+									f_write( &cf, CARDMemory, CARDMemorySize, &wrote );
+									f_close( &cf );
 								}
 							}
 							CARDBit = 2;
