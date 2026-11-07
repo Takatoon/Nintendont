@@ -44,6 +44,8 @@ static u32 CARDStateCallCount;
 static u32 CARDOffset;
 static u32 FirstCMD;
 static u8 CARDGP1EjectPosition;
+static u32 CARDGP1EjectTimer;
+static u8 CARDGP1EjectReported;
 
 static u32 BufsAllocated = 0;
 void GCAMInit( void )
@@ -86,6 +88,7 @@ void GCAMInit( void )
 	FirstCMD = 0;
 	STRInit = 0;
 	CARDGP1EjectPosition = 0;
+	CARDGP1EjectReported = 0;
 }
 
 static const char *CARD_NAME_GP1 = "/saves/GP1.bin";
@@ -193,6 +196,19 @@ void GCAMCARDCommand( char *DataIn, char *DataOut )
 		res[resp++] = 0x00;	// 0x00		 len
 		u8 GP1EjectReply = TRIGame == TRI_GP1 && CARDGP1EjectPosition != 0 &&
 			(CARDCommand == CARD_80 || CARDCommand == CARD_GET_CARD_STATE);
+		if( GP1EjectReply && CARDGP1EjectPosition == 0x34 )
+		{
+			if( !CARDGP1EjectReported )
+			{
+				CARDGP1EjectReported = 1;
+				CARDGP1EjectTimer = read32(HW_TIMER);
+			}
+			else if( TimerDiffTicks(CARDGP1EjectTimer) >= 284766 ) // About 150 ms after reporting the card in the slot.
+			{
+				CARDGP1EjectPosition = 0x30;
+				CARDIsInserted = 0;
+			}
+		}
 		if( GP1EjectReply )
 			dbgprintf("GP1 card removal: command=%02x position=%02x\n", CARDCommand, CARDGP1EjectPosition );
 		switch(CARDCommand)
@@ -557,8 +573,8 @@ void GCAMCARDCommand( char *DataIn, char *DataOut )
 							CARDCommand	= CARD_80;
 							if( TRIGame == TRI_GP1 && CARDGP1EjectPosition == 0 )
 							{
-								CARDGP1EjectPosition = 0x30; // Card reported as immediately removed.
-								CARDIsInserted = 0;
+								CARDGP1EjectPosition = 0x34; // Card ejected to the entry slot.
+								CARDGP1EjectReported = 0;
 							}
 
 							if( TRIGame != TRI_AX )
