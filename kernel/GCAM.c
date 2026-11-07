@@ -43,6 +43,7 @@ static u32 CARDBit;
 static u32 CARDStateCallCount;
 static u32 CARDOffset;
 static u32 FirstCMD;
+static u8 CARDGP1EjectPosition;
 
 static u32 BufsAllocated = 0;
 void GCAMInit( void )
@@ -84,6 +85,7 @@ void GCAMInit( void )
 	CARDOffset = 0;
 	FirstCMD = 0;
 	STRInit = 0;
+	CARDGP1EjectPosition = 0;
 }
 
 static const char *CARD_NAME_GP1 = "/saves/GP1.bin";
@@ -189,6 +191,10 @@ void GCAMCARDCommand( char *DataIn, char *DataOut )
 		u32 ChkStart = resp;
 
 		res[resp++] = 0x00;	// 0x00		 len
+		u8 GP1EjectReply = TRIGame == TRI_GP1 && CARDGP1EjectPosition != 0 &&
+			(CARDCommand == CARD_80 || CARDCommand == CARD_GET_CARD_STATE);
+		if( GP1EjectReply )
+			dbgprintf("GP1 card removal: command=%02x position=%02x\n", CARDCommand, CARDGP1EjectPosition );
 		switch(CARDCommand)
 		{
 			case CARD_INIT:
@@ -206,6 +212,12 @@ void GCAMCARDCommand( char *DataIn, char *DataOut )
 			case CARD_GET_CARD_STATE:
 			{
 				res[resp++] = 0x20;	// 0x01
+				if( GP1EjectReply )
+				{
+					res[resp++] = CARDGP1EjectPosition;
+					res[resp++] = 0x30; // No reader error.
+					break;
+				}
 				res[resp++] = 0x20|CARDBit;	// 0x02
 				/*
 					bit 0: PLease take your card
@@ -243,6 +255,8 @@ void GCAMCARDCommand( char *DataIn, char *DataOut )
 
 				if( TRIGame == TRI_AX )
 					res[resp++] = 0x01;	// 0x02
+				else if( GP1EjectReply )
+					res[resp++] = CARDGP1EjectPosition;
 				else
 					res[resp++] = 0x31;	// 0x02
 
@@ -275,7 +289,8 @@ void GCAMCARDCommand( char *DataIn, char *DataOut )
 		}
 
 		res[resp++] = 0x30;	// 0x04
-		res[resp++] = 0x00;	// 0x05
+		if( !GP1EjectReply )
+			res[resp++] = 0x00;	// 0x05
 
 		res[resp++] = 0x03;	// 0x06
 
@@ -327,6 +342,7 @@ void GCAMCARDCommand( char *DataIn, char *DataOut )
 							dbgprintf("CARDInit()\n");
 		#endif
 							CARDCommand = CARD_INIT;
+							CARDGP1EjectPosition = 0;
 
 							CARDWriteLength		= 0;
 							CARDBit				= 0;
@@ -420,6 +436,7 @@ void GCAMCARDCommand( char *DataIn, char *DataOut )
 							dbgprintf("CARDRead()\n");
 		#endif
 							CARDCommand		= CARD_READ;
+							CARDGP1EjectPosition = 0;
 
 							//Prepare read packet
 							memset( CARDReadPacket, 0, 0xDB );
@@ -485,6 +502,7 @@ void GCAMCARDCommand( char *DataIn, char *DataOut )
 						case 0x53000000:
 						{
 							CARDCommand		= CARD_WRITE;
+							CARDGP1EjectPosition = 0;
 
 							CARDMemorySize		= CARDBuffer[1] - 9;
 
@@ -537,6 +555,11 @@ void GCAMCARDCommand( char *DataIn, char *DataOut )
 							dbgprintf("CARDUnknown80()\n");
 		#endif
 							CARDCommand	= CARD_80;
+							if( TRIGame == TRI_GP1 && CARDGP1EjectPosition == 0 )
+							{
+								CARDGP1EjectPosition = 0x30; // Card reported as immediately removed.
+								CARDIsInserted = 0;
+							}
 
 							if( TRIGame != TRI_AX )
 								CARDBit = 0;
